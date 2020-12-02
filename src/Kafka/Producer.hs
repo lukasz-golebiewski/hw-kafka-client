@@ -137,7 +137,7 @@ produceMessage :: MonadIO m
                => KafkaProducer
                -> ProducerRecord
                -> m (Maybe KafkaError)
-produceMessage kp m = produceMessage' kp m (pure . mempty) >>= adjustRes
+produceMessage kp m = produceMessage' kp m (pure . mempty) >>= adjustRes . fst
   where
     adjustRes = \case
       Right () -> pure Nothing
@@ -152,7 +152,7 @@ produceMessage' :: MonadIO m
                 => KafkaProducer
                 -> ProducerRecord
                 -> (DeliveryReport -> IO ())
-                -> m (Either ImmediateError ())
+                -> m (Either ImmediateError (), IO ())
 produceMessage' kp@(KafkaProducer (Kafka k) _ (TopicConf tc)) msg cb = liftIO $
   fireCallbacks >> bracket (mkTopic . prTopic $ msg) closeTopic withTopic
   where
@@ -164,7 +164,7 @@ produceMessage' kp@(KafkaProducer (Kafka k) _ (TopicConf tc)) msg cb = liftIO $
 
     closeTopic = either mempty destroyUnmanagedRdKafkaTopic
 
-    withTopic (Left err) = return . Left . ImmediateError . KafkaError . Text.pack $ err
+    withTopic (Left err) = pure $ (Left $ ImmediateError $ KafkaError $ Text.pack $ err, (pure ()))
     withTopic (Right topic) =
       withBS (prValue msg) $ \payloadPtr payloadLength ->
         withBS (prKey msg) $ \keyPtr keyLength -> do
@@ -178,10 +178,9 @@ produceMessage' kp@(KafkaProducer (Kafka k) _ (TopicConf tc)) msg cb = liftIO $
             keyPtr
             (fromIntegral keyLength)
             (castStablePtrToPtr callbackPtr)
-          _ <- freeStablePtr callbackPtr
           pure $ case res of
-            Left err -> Left . ImmediateError $ err
-            Right () -> Right ()
+            Left err -> (Left $ ImmediateError $ err, (freeStablePtr callbackPtr))
+            Right () -> (Right (), (freeStablePtr callbackPtr))
 
 -- | Sends a batch of messages.
 -- Returns a list of messages which it was unable to send with corresponding errors.
