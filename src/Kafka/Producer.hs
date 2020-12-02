@@ -1,27 +1,27 @@
-{-# LANGUAGE TupleSections              #-}
-{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE LambdaCase    #-}
+{-# LANGUAGE TupleSections #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module to produce messages to Kafka topics.
--- 
+--
 -- Here's an example of code to produce messages to a topic:
--- 
+--
 -- @
 -- import Control.Exception (bracket)
 -- import Control.Monad (forM_)
 -- import Data.ByteString (ByteString)
 -- import Kafka.Producer
--- 
+--
 -- -- Global producer properties
 -- producerProps :: 'ProducerProperties'
 -- producerProps = 'brokersList' ['BrokerAddress' "localhost:9092"]
 --              <> 'logLevel' 'KafkaLogDebug'
--- 
+--
 -- -- Topic to send messages to
 -- targetTopic :: 'TopicName'
 -- targetTopic = 'TopicName' "kafka-client-example-topic"
--- 
+--
 -- -- Run an example
 -- runProducerExample :: IO ()
 -- runProducerExample =
@@ -32,18 +32,18 @@
 --       clProducer (Right prod) = 'closeProducer' prod
 --       runHandler (Left err)   = pure $ Left err
 --       runHandler (Right prod) = sendMessages prod
--- 
+--
 -- -- Example sending 2 messages and printing the response from Kafka
 -- sendMessages :: 'KafkaProducer' -> IO (Either 'KafkaError' ())
 -- sendMessages prod = do
 --   err1 <- 'produceMessage' prod (mkMessage Nothing (Just "test from producer") )
 --   forM_ err1 print
--- 
+--
 --   err2 <- 'produceMessage' prod (mkMessage (Just "key") (Just "test from producer (with key)"))
 --   forM_ err2 print
--- 
+--
 --   pure $ Right ()
--- 
+--
 -- mkMessage :: Maybe ByteString -> Maybe ByteString -> 'ProducerRecord'
 -- mkMessage k v = 'ProducerRecord'
 --                   { 'prTopic' = targetTopic
@@ -79,13 +79,13 @@ import qualified Data.Text                as Text
 import           Foreign.ForeignPtr       (newForeignPtr_, withForeignPtr)
 import           Foreign.Marshal.Array    (withArrayLen)
 import           Foreign.Ptr              (Ptr, nullPtr, plusPtr)
+import           Foreign.StablePtr        (castStablePtrToPtr, freeStablePtr, newStablePtr)
 import           Foreign.Storable         (Storable (..))
-import           Foreign.StablePtr        (newStablePtr, castStablePtrToPtr)
 import           Kafka.Internal.RdKafka   (RdKafkaMessageT (..), RdKafkaRespErrT (..), RdKafkaTypeT (..), destroyUnmanagedRdKafkaTopic, newRdKafkaT, newUnmanagedRdKafkaTopicT, rdKafkaOutqLen, rdKafkaProduce, rdKafkaProduceBatch, rdKafkaSetLogLevel)
 import           Kafka.Internal.Setup     (Kafka (..), KafkaConf (..), KafkaProps (..), TopicConf (..), TopicProps (..), kafkaConf, topicConf)
 import           Kafka.Internal.Shared    (pollEvents)
 import           Kafka.Producer.Convert   (copyMsgFlags, handleProduceErr', producePartitionCInt, producePartitionInt)
-import           Kafka.Producer.Types     (KafkaProducer (..), ImmediateError(..))
+import           Kafka.Producer.Types     (ImmediateError (..), KafkaProducer (..))
 
 import Kafka.Producer.ProducerProperties as X
 import Kafka.Producer.Types              as X hiding (KafkaProducer)
@@ -178,7 +178,7 @@ produceMessage' kp@(KafkaProducer (Kafka k) _ (TopicConf tc)) msg cb = liftIO $
             keyPtr
             (fromIntegral keyLength)
             (castStablePtrToPtr callbackPtr)
-
+          _ <- freeStablePtr callbackPtr
           pure $ case res of
             Left err -> Left . ImmediateError $ err
             Right () -> Right ()
